@@ -28,6 +28,10 @@ func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers
 		log.Error("request.go	Failed to get the base path: ", err)
 	}
 
+	if basePath == "/" {
+		basePath = ""
+	}
+
 	// Add global security feature here
 
 	securityScheme := &openapiData.Components.SecuritySchemes
