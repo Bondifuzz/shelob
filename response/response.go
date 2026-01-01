@@ -13,8 +13,11 @@ import (
 
 func ParseResponse(ctx context.Context, httpRequests []*http.Request, requestsValidationInput []*openapi3filter.RequestValidationInput, requestsValidationError []*error, outputDir string, detailed bool) {
 	logging.CreateDir(outputDir)
+	log.Debugf("response.go	Total requests to send: %d", len(httpRequests))
+
 	for idx := range httpRequests {
 		func() {
+			log.Debugf("response.go	Sending request: %s %s", httpRequests[idx].Method, httpRequests[idx].URL.String())
 			client := &http.Client{}
 			requestBodyCopy, err := httpRequests[idx].GetBody()
 			if err != nil {
@@ -28,7 +31,8 @@ func ParseResponse(ctx context.Context, httpRequests []*http.Request, requestsVa
 
 			httpResponse, err := client.Do(httpRequests[idx])
 			if err != nil {
-				log.Fatal("response.go	Failed to make http request: ", err)
+				log.Error("response.go	Failed to make http request: ", err)
+				return // Don't fatal on single request failure
 			}
 
 			defer httpResponse.Body.Close()
@@ -40,6 +44,8 @@ func ParseResponse(ctx context.Context, httpRequests []*http.Request, requestsVa
 
 			responseHeaders := httpRequests[idx].Header.Clone()
 			responseCode := httpResponse.StatusCode
+
+			log.Debugf("response.go	Response received: %d for %s %s", responseCode, httpRequests[idx].Method, httpRequests[idx].URL.String())
 
 			err = ValidateResponse(ctx, requestsValidationInput[idx], responseCode, &responseHeaders)
 

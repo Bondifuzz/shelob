@@ -9,7 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func ParseOpenapiSpec(spec string) (*context.Context, *openapi3.T, *routers.Router) {
+func ParseOpenapiSpec(spec string, targetURL string) (*context.Context, *openapi3.T, *routers.Router) {
 	ctx := context.Background()
 	loader := &openapi3.Loader{Context: ctx}
 	openapiData, err := loader.LoadFromFile(spec)
@@ -17,10 +17,49 @@ func ParseOpenapiSpec(spec string) (*context.Context, *openapi3.T, *routers.Rout
 		log.Fatal("openapi.go	Failed to load specification from file: ", err)
 	}
 
+	// Fix empty server URLs by using the target URL from command line
+	if openapiData.Servers != nil {
+		for _, server := range openapiData.Servers {
+			if server != nil && server.URL == "" {
+				server.URL = targetURL
+			}
+		}
+	} else {
+		// If no servers are defined, create a default server with the target URL
+		openapiData.Servers = openapi3.Servers{
+			&openapi3.Server{
+				URL: targetURL,
+			},
+		}
+	}
+
 	err = openapiData.Validate(ctx)
 
 	if err != nil {
 		log.Fatal("openapi.go	Failed to validate data: ", err)
+	}
+
+	// Additional check: Ensure the spec has paths
+	if openapiData.Paths == nil || len(openapiData.Paths) == 0 {
+		log.Fatal("openapi.go	OpenAPI spec has no paths defined - invalid or empty spec file")
+	}
+
+	// Additional check: Ensure the spec has a proper structure
+	if openapiData.Info == nil {
+		log.Warn("openapi.go	OpenAPI spec has no info section")
+	}
+
+	// Count operations to ensure there are enough to fuzz
+	totalOperations := 0
+	for _, pathItem := range openapiData.Paths {
+		if pathItem != nil {
+			operations := pathItem.Operations()
+			totalOperations += len(operations)
+		}
+	}
+
+	if totalOperations == 0 {
+		log.Fatal("openapi.go	OpenAPI spec has paths but no operations defined - invalid spec file")
 	}
 
 	router, err := gorillamux.NewRouter(openapiData)
