@@ -10,10 +10,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func CreatePathParams(operation *openapi3.Operation) (map[string]interface{}, *url.Values, map[string]interface{}, map[string]interface{}) {
+func CreatePathParams(operation *openapi3.Operation) (map[string]interface{}, *url.Values, map[string]string, map[string]string) {
 	pathParams := make(map[string]interface{})
-	headerParams := make(map[string]interface{})
-	cookieParams := make(map[string]interface{})
+	headerParams := make(map[string]string)
+	cookieParams := make(map[string]string)
 	queryParams := &url.Values{}
 	if operation.Parameters != nil {
 		parameters := operation.Parameters
@@ -24,11 +24,11 @@ func CreatePathParams(operation *openapi3.Operation) (map[string]interface{}, *u
 				case "path":
 					pathParams[parameter.Value.Name] = input
 				case "query":
-					queryParams.Add(parameter.Value.Name, input.(string))
+					queryParams.Add(parameter.Value.Name, fmt.Sprintf("%v", input))
 				case "header":
-					headerParams[parameter.Value.Name] = input
+					headerParams[parameter.Value.Name] = fmt.Sprintf("%v", input)
 				case "cookie":
-					cookieParams[parameter.Value.Name] = input
+					cookieParams[parameter.Value.Name] = fmt.Sprintf("%v", input)
 				default:
 					log.Warn("urlParams.go	Unresolved parameter type: ", parameter.Value.In)
 				}

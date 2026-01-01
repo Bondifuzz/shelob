@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -23,27 +24,38 @@ type UserItem struct {
 // }
 
 func CreateUser(username, password, url string) []*http.Cookie {
+	return CreateUserWithLoginEndpoint(username, password, url, "/api/v3/user/login")
+}
+
+func CreateUserWithLoginEndpoint(username, password, url, loginEndpoint string) []*http.Cookie {
 	testUser := UserItem{
 		Username: username,
 		Password: password,
 	}
 
-	return testUser.getCookies(url)
+	return testUser.getCookies(url, loginEndpoint)
 }
 
-func (testUser *UserItem) getCookies(url string) []*http.Cookie {
+func (testUser *UserItem) getCookies(url, loginEndpoint string) []*http.Cookie {
+	// Ensure URL has proper scheme
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = "http://" + url
+	}
+
 	payload, err := json.Marshal(testUser)
 	if err != nil {
 		log.Error("auth.go	Failed to create json: ", err)
+		return nil
 	}
 
 	bodyParams := bytes.NewReader(payload)
 
-	// Correct path according to your login url
-
-	httpRequest, err := http.NewRequest("POST", url+"/user/login", bodyParams)
+	// Use the provided login endpoint
+	loginURL := url + loginEndpoint
+	httpRequest, err := http.NewRequest("POST", loginURL, bodyParams)
 	if err != nil {
 		log.Error("auth.go	Failed to create http request: ", err)
+		return nil
 	}
 
 	httpRequest.Header.Set("Accept", "application/json")
@@ -52,6 +64,7 @@ func (testUser *UserItem) getCookies(url string) []*http.Cookie {
 	response, err := http.DefaultClient.Do(httpRequest)
 	if err != nil {
 		log.Error("auth.go	Failed to make http request: ", err)
+		return nil
 	}
 
 	defer response.Body.Close()

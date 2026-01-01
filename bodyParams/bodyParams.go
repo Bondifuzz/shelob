@@ -37,14 +37,16 @@ func CreateBodyData(operation *openapi3.Operation) (string, *bytes.Buffer) {
 					goto Exit
 
 				case "application/xml":
-
+					// XML marshaling doesn't work well with map[string]interface{}
+					// We need to handle this case specially
 					bodyParamsXml, err := xml.Marshal(bodyData)
 					if err != nil {
-						log.Error("bodyParams.go	xml.Marshal: ", err)
+						log.Warn("bodyParams.go	xml.Marshal: ", err, " - using empty body for XML")
+						// If XML marshaling fails, we'll use an empty body but still continue
+						goto Exit
 					}
 
 					_, err = bodyParams.Write(bodyParamsXml)
-
 					if err != nil {
 						log.Error("bodyParams.go	bodyParams.Write: ", err)
 					}
