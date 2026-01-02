@@ -5,7 +5,7 @@ go 1.22.5
 require (
 	github.com/brianvoe/gofakeit/v6 v6.19.0
 	github.com/getkin/kin-openapi v0.131.0
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.1
 )
 
 require (
