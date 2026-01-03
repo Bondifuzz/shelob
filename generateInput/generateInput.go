@@ -4,13 +4,21 @@ import (
 	"encoding/base64"
 	"math"
 
-	"github.com/brianvoe/gofakeit/v6"
+	"github.com/brianvoe/gofakeit/v7"
 	"github.com/getkin/kin-openapi/openapi3"
 	log "github.com/sirupsen/logrus"
 )
 
 func GenerateRandomDataModels(schema *openapi3.Schema) interface{} {
-	switch schema.Type {
+	if schema.Type == nil || len(*schema.Type) == 0 {
+		log.Warn("Schema type is nil or empty")
+		return ""
+	}
+
+	// Get the first type from the schema type array
+	schemaType := (*schema.Type)[0]
+
+	switch schemaType {
 	case "string":
 		if schema.Pattern != "" {
 			return CheckStringPattern(schema.Pattern)
@@ -27,7 +35,8 @@ func GenerateRandomDataModels(schema *openapi3.Schema) interface{} {
 		if schema.Example != nil {
 			return schema.Example
 		}
-		return gofakeit.Generate("????????????????????????????????????????????????????????????????????????????????????????????????????")
+		result, _ := gofakeit.Generate("????????????????????????????????????????????????????????????????????????????????????????????????????")
+		return result
 	case "number":
 		return CheckNumberFormat(schema.Format)
 	case "integer":
@@ -36,16 +45,20 @@ func GenerateRandomDataModels(schema *openapi3.Schema) interface{} {
 		return gofakeit.Bool()
 	case "array":
 		var array []interface{}
-		array = append(array, GenerateRandomDataModels(schema.Items.Value))
+		if schema.Items != nil && schema.Items.Value != nil {
+			array = append(array, GenerateRandomDataModels(schema.Items.Value))
+		}
 		return array
 	case "object":
 		objects := make(map[string]interface{})
 		for property, schemaInternal := range schema.Properties {
-			objects[property] = GenerateRandomDataModels(schemaInternal.Value)
+			if schemaInternal.Value != nil {
+				objects[property] = GenerateRandomDataModels(schemaInternal.Value)
+			}
 		}
 		return objects
 	default:
-		log.Warn("Unresolved schema type:", schema.Type)
+		log.Warn("Unresolved schema type:", schemaType)
 	}
 	return ""
 }
@@ -80,9 +93,11 @@ func CheckIntegerFormat(format string) interface{} {
 func CheckStringFormat(format string) interface{} {
 	switch format {
 	case "date":
-		return gofakeit.Generate("####-##-##")
+		result, _ := gofakeit.Generate("####-##-##")
+		return result
 	case "date-time":
-		return gofakeit.Date()
+		date := gofakeit.Date()
+		return date.Format("2006-01-02T15:04:05Z")
 	case "password":
 
 		// Add support to change password length

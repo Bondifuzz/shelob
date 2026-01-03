@@ -28,6 +28,8 @@ all options:
 ```bash
 -apikey string
     api key for auth
+-debug
+    enable debug logs (default: true)
 -detailed
     include successful test cases
 -duration duration
@@ -48,10 +50,9 @@ all options:
 
 ## Demo
 
-You can try Shelob using local demo (`demo` directory).
-Just simply run `demo/createDocker.sh`.
-It uses [Petstore example](https://hub.docker.com/r/swaggerapi/petstore3).
-The following OpenAPI specification is located in `demo/openapi.json`
+You can try Shelob using local demo (`demo` directory) or [VAmPI](https://github.com/erev0s/VAmPI).
+
+For local demo just simply run `demo/createDocker.sh`. It uses [Petstore example](https://hub.docker.com/r/swaggerapi/petstore3).The following OpenAPI specification is located in `./demo/openapi.json`
 
 ## Contributing
 

@@ -3,6 +3,7 @@ package logging
 import (
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -22,7 +23,11 @@ func WrapCrash(filename string, response *http.Response, requestValidationError 
 		DisableHTMLEscape: true,
 	})
 
-	file, err := os.OpenFile(filename+".json", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// Create a unique filename with timestamp to avoid appending to the same file
+	timestamp := time.Now().Format("20060102_150405_000") // Format: YYYYMMDD_HHMMSS_mmm
+	uniqueFilename := filename + "_" + timestamp + ".json"
+
+	file, err := os.OpenFile(uniqueFilename, os.O_CREATE|os.O_WRONLY, 0o644)
 
 	if err == nil {
 		log.SetOutput(file)
@@ -53,7 +58,11 @@ func WrapTest(filename string, response *http.Response, requestValidationError e
 		DisableHTMLEscape: true,
 	})
 
-	file, err := os.OpenFile(filename+".json", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// Create a unique filename with timestamp to avoid appending to the same file
+	timestamp := time.Now().Format("20060102_150405_000") // Format: YYYYMMDD_HHMMSS_mmm
+	uniqueFilename := filename + "_" + timestamp + ".json"
+
+	file, err := os.OpenFile(uniqueFilename, os.O_CREATE|os.O_WRONLY, 0o644)
 
 	if err == nil {
 		log.SetOutput(file)
