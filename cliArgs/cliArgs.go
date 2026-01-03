@@ -8,7 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func ParseCliArgs() (string, string, string, string, string, string, string, bool, time.Duration, []string) {
+func ParseCliArgs() (string, string, string, string, string, string, string, bool, time.Duration, []string, bool) {
 	spec := flag.String("spec", "", "openapi file specification (Required)")
 	targetURL := flag.String("url", "", "target URL (Required)")
 	username := flag.String("user", "", "username (Basic auth)")
@@ -18,6 +18,7 @@ func ParseCliArgs() (string, string, string, string, string, string, string, boo
 	outputDir := flag.String("output", "fuzzer_output", "output directory")
 	detailedOutput := flag.Bool("detailed", false, "include successful test cases")
 	duration := flag.Duration("duration", 3600000000000, "time duration of fuzzing")
+	enableDebug := flag.Bool("debug", false, "enable debug logs (default: true)")
 
 	flag.Parse()
 
@@ -35,5 +36,5 @@ func ParseCliArgs() (string, string, string, string, string, string, string, boo
 
 	log.Info("[+++] cli arguments are parsed")
 
-	return *spec, *targetURL, *username, *password, *apikey, *token, *outputDir, *detailedOutput, *duration, extraArgs
+	return *spec, *targetURL, *username, *password, *apikey, *token, *outputDir, *detailedOutput, *duration, extraArgs, *enableDebug
 }

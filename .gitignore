@@ -40,5 +40,5 @@ Thumbs.db
 .env
 
 # Shelob
-fuzzer_output/
+fuzzer_output/*
 shelob

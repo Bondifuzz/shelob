@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func CreateBodyData(operation *openapi3.Operation) (string, *bytes.Buffer) {
+func CreateBodyData(operation *openapi3.Operation, debugEnabled bool) (string, *bytes.Buffer) {
 	// As default mimetype
 
 	mimeType := "application/json"
@@ -41,7 +41,9 @@ func CreateBodyData(operation *openapi3.Operation) (string, *bytes.Buffer) {
 					// We need to handle this case specially
 					bodyParamsXml, err := xml.Marshal(bodyData)
 					if err != nil {
-						log.Warn("bodyParams.go	xml.Marshal: ", err, " - using empty body for XML")
+						if debugEnabled {
+							log.Warn("bodyParams.go	xml.Marshal: ", err, " - using empty body for XML")
+						}
 						// If XML marshaling fails, we'll use an empty body but still continue
 						goto Exit
 					}
@@ -69,7 +71,9 @@ func CreateBodyData(operation *openapi3.Operation) (string, *bytes.Buffer) {
 
 					goto Exit
 				default:
-					log.Warn("bodyParams.go	Unresolved mime type: ", mimeType)
+					if debugEnabled {
+						log.Warn("bodyParams.go	Unresolved mime type: ", mimeType)
+					}
 				}
 			}
 		}

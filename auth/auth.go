@@ -19,9 +19,6 @@ type UserItem struct {
 	// SessionMetadata string `json:"session_metadata"`
 }
 
-// type Users struct {
-//     user []UserItem
-// }
 
 func CreateUser(username, password, url string) []*http.Cookie {
 	return CreateUserWithLoginEndpoint(username, password, url, "/api/v3/user/login")
@@ -63,8 +60,9 @@ func (testUser *UserItem) getCookies(url, loginEndpoint string) []*http.Cookie {
 
 	response, err := http.DefaultClient.Do(httpRequest)
 	if err != nil {
-		log.Error("auth.go	Failed to make http request: ", err)
-		return nil
+		log.Warn("auth.go	Failed to make http request for authentication: ", err)
+		// Return empty cookies instead of nil to allow fuzzing to continue without authentication
+		return []*http.Cookie{}
 	}
 
 	defer response.Body.Close()
@@ -73,6 +71,8 @@ func (testUser *UserItem) getCookies(url, loginEndpoint string) []*http.Cookie {
 		log.Info("[+++] Cookies are stored")
 	} else {
 		log.Warn("[---] No cookies ;(\t", response.Status)
+		// Return empty cookies instead of nil to allow fuzzing to continue without authentication
+		return []*http.Cookie{}
 	}
 
 	return response.Cookies()

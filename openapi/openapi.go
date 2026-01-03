@@ -40,7 +40,7 @@ func ParseOpenapiSpec(spec string, targetURL string) (*context.Context, *openapi
 	}
 
 	// Additional check: Ensure the spec has paths
-	if openapiData.Paths == nil || len(openapiData.Paths) == 0 {
+	if openapiData.Paths == nil || len(openapiData.Paths.Map()) == 0 {
 		log.Fatal("openapi.go	OpenAPI spec has no paths defined - invalid or empty spec file")
 	}
 
@@ -51,13 +51,22 @@ func ParseOpenapiSpec(spec string, targetURL string) (*context.Context, *openapi
 
 	// Count operations to ensure there are enough to fuzz
 	totalOperations := 0
-	for _, pathItem := range openapiData.Paths {
+	log.Debugf("openapi.go	Analyzing paths in spec...")
+	for path, pathItem := range openapiData.Paths.Map() {
+		log.Debugf("openapi.go	Path: %s", path)
 		if pathItem != nil {
 			operations := pathItem.Operations()
+			log.Debugf("openapi.go	Path %s has %d operations", path, len(operations))
+			for method, operation := range operations {
+				log.Debugf("openapi.go	- %s: %s", method, operation.Summary)
+			}
 			totalOperations += len(operations)
+		} else {
+			log.Debugf("openapi.go	Path %s has nil pathItem", path)
 		}
 	}
 
+	log.Infof("openapi.go	Total operations in spec: %d", totalOperations)
 	if totalOperations == 0 {
 		log.Fatal("openapi.go	OpenAPI spec has paths but no operations defined - invalid spec file")
 	}
