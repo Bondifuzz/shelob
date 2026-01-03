@@ -17,7 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers.Router, targetURL string, authCookies []*http.Cookie, username, password, apikey, token string, extraArgs []string) ([]*http.Request, []*openapi3filter.RequestValidationInput, []*error) {
+func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers.Router, targetURL string, authCookies []*http.Cookie, username, password, apikey, token string, extraArgs []string, debugEnabled bool) ([]*http.Request, []*openapi3filter.RequestValidationInput, []*error) {
 	var (
 		httpRequests            []*http.Request
 		requestsValidationInput []*openapi3filter.RequestValidationInput
@@ -68,7 +68,9 @@ func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers
 	for path, pathItem := range openapiData.Paths.Map() {
 		log.Debugf("request.go	Processing path: %s", path)
 		if re.FindStringSubmatch(path) != nil {
-			log.Warnf("request.go	Logout operation at %#v, skip it", path)
+			if debugEnabled {
+				log.Warnf("request.go	Logout operation at %#v, skip it", path)
+			}
 			continue
 		}
 
@@ -85,7 +87,7 @@ func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers
 			log.Debugf("request.go	Processing operation: %s %s", method, path)
 			pathParams, queryParams, headerParams, cookieParams := urlParams.CreatePathParams(operation)
 			log.Debugf("request.go	Path params: %v, Query params: %v", pathParams, queryParams)
-			contentType, bodyPayload := bodyParams.CreateBodyData(operation)
+			contentType, bodyPayload := bodyParams.CreateBodyData(operation, debugEnabled)
 			log.Debugf("request.go	Content type: %s, Body payload length: %d", contentType, bodyPayload.Len())
 			security.CreateSecurityParams(operation, securityScheme, *queryParams, headerParams, cookieParams, username, password, apikey, token)
 

@@ -60,7 +60,7 @@ func Run() {
 	log.Debugf("Starting fuzzing loop with duration: %v", Duration)
 	for time.Since(Start) < Duration {
 		log.Debugf("Starting request creation iteration at %v", time.Since(Start))
-		Requests, RequestsValidationInput, RequestsValidationError := request.CreateRequest(*Context, OpenapiData, Router, TargetURL, AuthCookies, UserName, Password, ApiKey, Token, ExtraArgs)
+		Requests, RequestsValidationInput, RequestsValidationError := request.CreateRequest(*Context, OpenapiData, Router, TargetURL, AuthCookies, UserName, Password, ApiKey, Token, ExtraArgs, EnableDebug)
 		log.Debugf("Created %d requests in this iteration", len(Requests))
 		log.Debugf("Request validation inputs: %d", len(RequestsValidationInput))
 		log.Debugf("Request validation errors: %d", len(RequestsValidationError))
