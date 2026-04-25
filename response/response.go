@@ -12,7 +12,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func ParseResponse(ctx context.Context, httpRequests []*http.Request, requestsValidationInput []*openapi3filter.RequestValidationInput, requestsValidationError []*error, outputDir string, detailed bool, rps int) {
+const defaultHTTPTimeout = 30 * time.Second
+
+func ParseResponse(ctx context.Context, httpRequests []*http.Request, requestsValidationInput []*openapi3filter.RequestValidationInput, requestsValidationError []error, outputDir string, detailed bool, rps int) {
 	logging.CreateDir(outputDir)
 	log.Debugf("response.go	Total requests to send: %d", len(httpRequests))
 
@@ -20,6 +22,8 @@ func ParseResponse(ctx context.Context, httpRequests []*http.Request, requestsVa
 		log.Debugf("response.go	No requests to send - this might be the issue!")
 		return
 	}
+
+	client := &http.Client{Timeout: defaultHTTPTimeout}
 
 	// Initialize rate limiter if RPS is set
 	var rateLimiter *time.Ticker
@@ -37,7 +41,6 @@ func ParseResponse(ctx context.Context, httpRequests []*http.Request, requestsVa
 		}
 		log.Debugf("response.go	About to send request: %s %s", httpRequests[idx].Method, httpRequests[idx].URL.String())
 		func() {
-			client := &http.Client{}
 			// We need to get the body again for logging purposes, but don't consume it unnecessarily
 			// Just get the body for logging if needed
 			var requestBody []byte
@@ -87,42 +90,35 @@ func ParseResponse(ctx context.Context, httpRequests []*http.Request, requestsVa
 				log.Error("response.go	Failed to read response body: ", err)
 			}
 
-			responseHeaders := httpRequests[idx].Header.Clone()
 			responseCode := httpResponse.StatusCode
 
 			log.Debugf("response.go	Response received: %d for %s %s", responseCode, httpRequests[idx].Method, httpRequests[idx].URL.String())
 
-			err = ValidateResponse(ctx, requestsValidationInput[idx], responseCode, &responseHeaders)
+			if idx >= len(requestsValidationInput) {
+				log.Errorf("response.go	Missing request validation input for request index %d", idx)
+				return
+			}
+
+			err = ValidateResponse(ctx, requestsValidationInput[idx], responseCode, httpResponse.Header, responseBody)
 
 			if err != nil {
 				log.Debugf("response.go	Validation error for %s %s: %v", httpRequests[idx].Method, httpRequests[idx].URL.String(), err)
 				// Create filename with host:port and path to better identify vulnerable sites
-				hostPort := strings.ReplaceAll(httpRequests[idx].URL.Host, ":", "_") // Replace : with _ to avoid filesystem issues
-				pathPart := strings.ReplaceAll(httpRequests[idx].URL.RawPath, "/", "_")
-				if pathPart == "" || pathPart == "_" {
-					pathPart = "_root" // Use _root for root path to make it more descriptive
-				}
-				logging.WrapCrash(outputDir+"/"+hostPort+pathPart, httpResponse, *requestsValidationError[idx], requestBody, responseBody, err)
+				logging.WrapCrash(outputDir+"/"+reportName(httpRequests[idx]), httpResponse, validationErrorAt(requestsValidationError, idx), requestBody, responseBody, err)
 			} else if detailed {
 				log.Debugf("response.go	Validation passed for %s %s", httpRequests[idx].Method, httpRequests[idx].URL.String())
 				// Create filename with host:port and path to better identify vulnerable sites
-				hostPort := strings.ReplaceAll(httpRequests[idx].URL.Host, ":", "_") // Replace : with _ to avoid filesystem issues
-				pathPart := strings.ReplaceAll(httpRequests[idx].URL.RawPath, "/", "_")
-				if pathPart == "" || pathPart == "_" {
-					pathPart = "_root" // Use _root for root path to make it more descriptive
-				}
-				logging.WrapTest(outputDir+"/"+hostPort+pathPart, httpResponse, *requestsValidationError[idx], requestBody, responseBody, err)
+				logging.WrapTest(outputDir+"/"+reportName(httpRequests[idx]), httpResponse, validationErrorAt(requestsValidationError, idx), requestBody, responseBody, err)
 			}
 		}()
 	}
 }
 
-func ValidateResponse(ctx context.Context, requestValidationInput *openapi3filter.RequestValidationInput, responseCode int, responseHeaders *http.Header) error {
-	responseBody := []byte(`{}`)
+func ValidateResponse(ctx context.Context, requestValidationInput *openapi3filter.RequestValidationInput, responseCode int, responseHeaders http.Header, responseBody []byte) error {
 	responseValidationInput := &openapi3filter.ResponseValidationInput{
 		RequestValidationInput: requestValidationInput,
 		Status:                 responseCode,
-		Header:                 *responseHeaders,
+		Header:                 responseHeaders,
 		Options: &openapi3filter.Options{
 			ExcludeResponseBody:   false,
 			IncludeResponseStatus: true,
@@ -132,4 +128,20 @@ func ValidateResponse(ctx context.Context, requestValidationInput *openapi3filte
 	responseValidationInput.SetBodyBytes(responseBody)
 	err := openapi3filter.ValidateResponse(ctx, responseValidationInput)
 	return err
+}
+
+func reportName(request *http.Request) string {
+	hostPort := strings.ReplaceAll(request.URL.Host, ":", "_")
+	pathPart := strings.ReplaceAll(request.URL.EscapedPath(), "/", "_")
+	if pathPart == "" || pathPart == "_" {
+		pathPart = "_root"
+	}
+	return hostPort + pathPart
+}
+
+func validationErrorAt(errors []error, idx int) error {
+	if idx >= len(errors) {
+		return nil
+	}
+	return errors[idx]
 }

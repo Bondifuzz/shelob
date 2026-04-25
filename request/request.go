@@ -2,6 +2,7 @@ package request
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,46 +18,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers.Router, targetURL string, authCookies []*http.Cookie, username, password, apikey, token string, extraArgs []string, debugEnabled bool) ([]*http.Request, []*openapi3filter.RequestValidationInput, []*error) {
+func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers.Router, targetURL string, authCookies []*http.Cookie, username, password, apikey, token string, extraArgs []string, debugEnabled bool) ([]*http.Request, []*openapi3filter.RequestValidationInput, []error) {
 	var (
 		httpRequests            []*http.Request
 		requestsValidationInput []*openapi3filter.RequestValidationInput
-		requestsValidationError []*error
+		requestsValidationError []error
 	)
 
 	log.Debugf("request.go	Starting request creation for URL: %s", targetURL)
 	log.Debugf("request.go	Number of auth cookies: %d", len(authCookies))
 
-	// Get the base path from the OpenAPI spec
-	var basePath string
+	serverURL := ""
 	if openapiData.Servers != nil && len(openapiData.Servers) > 0 && openapiData.Servers[0] != nil {
-		serverURL := openapiData.Servers[0].URL
-		parsedURL, err := url.Parse(serverURL)
-		if err != nil {
-			log.Errorf("request.go	Failed to parse server URL %s: %v", serverURL, err)
-			basePath = "/"
-		} else {
-			basePath = parsedURL.Path
-			if basePath == "" {
-				basePath = "/"
-			}
-		}
+		serverURL = openapiData.Servers[0].URL
 	} else {
 		log.Warn("request.go	No servers defined in OpenAPI spec, using root path")
-		basePath = "/"
 	}
 
-	// Ensure base path starts with /
-	if !strings.HasPrefix(basePath, "/") {
-		basePath = "/" + basePath
-	}
-
-	// Ensure base path doesn't end with / unless it's just "/"
-	if len(basePath) > 1 && strings.HasSuffix(basePath, "/") {
-		basePath = strings.TrimSuffix(basePath, "/")
-	}
-
-	log.Debugf("request.go	Base path: %s", basePath)
+	log.Debugf("request.go	Server URL from spec: %s", serverURL)
 	log.Debugf("request.go	Target URL: %s", targetURL)
 
 	// Add global security feature here
@@ -91,41 +70,10 @@ func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers
 			log.Debugf("request.go	Content type: %s, Body payload length: %d", contentType, bodyPayload.Len())
 			security.CreateSecurityParams(operation, securityScheme, *queryParams, headerParams, cookieParams, username, password, apikey, token)
 
-			// Construct the full URL and determine path for path parameters
-			// If targetURL is provided via CLI, use it; otherwise use server URL from spec
-			var fullURL string
-			var fullPath string
-
-			if targetURL != "" {
-				// Avoid double slashes by ensuring basePath ends with / and path starts with /
-				// but only one slash is present in the final path
-				if basePath == "/" {
-					fullPath = path
-				} else {
-					// Ensure basePath ends with / and path doesn't start with /
-					cleanBasePath := strings.TrimSuffix(basePath, "/")
-					cleanPath := strings.TrimPrefix(path, "/")
-					if cleanPath == "" {
-						fullPath = cleanBasePath
-					} else {
-						fullPath = cleanBasePath + "/" + cleanPath
-					}
-				}
-				fullURL = targetURL + fullPath
-			} else {
-				// Use the server URL from the spec directly
-				if openapiData.Servers != nil && len(openapiData.Servers) > 0 && openapiData.Servers[0] != nil {
-					serverURL := openapiData.Servers[0].URL
-					// Ensure the server URL doesn't end with a slash before appending the path
-					serverURL = strings.TrimSuffix(serverURL, "/")
-					fullURL = serverURL + path
-					// For path parameters, we just use the path part
-					fullPath = path
-				} else {
-					// Fallback if no server URL is defined in the spec
-					log.Errorf("request.go	No server URL defined in spec and no target URL provided via CLI for path: %s", path)
-					continue
-				}
+			fullURL, fullPath, routePath, err := buildOperationURL(targetURL, serverURL, path)
+			if err != nil {
+				log.Errorf("request.go	Failed to build request URL for path %s: %v", path, err)
+				continue
 			}
 
 			httpRequest, err := http.NewRequest(method, fullURL, bodyPayload)
@@ -157,20 +105,6 @@ func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers
 				httpRequest.Header.Set("Content-Type", contentType)
 			}
 
-			// Determine the path for routing purposes
-			var routePath string
-			if targetURL != "" {
-				routePath = fullPath
-			} else {
-				// Extract path from the full URL when using server URL from spec
-				parsedURL, err := url.Parse(fullURL)
-				if err != nil {
-					log.Errorf("request.go	Failed to parse full URL for routing: %v", err)
-					continue
-				}
-				routePath = parsedURL.Path
-			}
-
 			// Find and validate route - use original path before parameter substitution
 			originalRequest, err := http.NewRequest(method, httpRequest.URL.Scheme+"://"+httpRequest.URL.Host+routePath, bodyPayload)
 			if err != nil {
@@ -193,12 +127,12 @@ func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers
 			log.Debugf("request.go	Route found for %s %s", method, routePath)
 
 			// Don't skip based on validation errors - we want to fuzz even invalid requests
-			requestValidationInput, _ := ValidateRequest(httpRequest, pathParamsVal, queryParams, route, ctx)
+			requestValidationInput, validationErr := ValidateRequest(httpRequest, pathParamsVal, queryParams, route, ctx)
 			log.Debugf("request.go	Validation completed for %s %s", method, routePath)
 
 			httpRequests = append(httpRequests, httpRequest)
 			requestsValidationInput = append(requestsValidationInput, requestValidationInput)
-			requestsValidationError = append(requestsValidationError, &err)
+			requestsValidationError = append(requestsValidationError, validationErr)
 			log.Debugf("request.go	Appended request, total requests now: %d", len(httpRequests))
 		}
 	}
@@ -206,6 +140,95 @@ func CreateRequest(ctx context.Context, openapiData *openapi3.T, router *routers
 	log.Debugf("request.go	Total requests created: %d", len(httpRequests))
 
 	return httpRequests, requestsValidationInput, requestsValidationError
+}
+
+func buildOperationURL(targetURL, serverURL, operationPath string) (string, string, string, error) {
+	serverBasePath, err := pathFromServerURL(serverURL)
+	if err != nil {
+		return "", "", "", err
+	}
+	routePath := joinURLPath(serverBasePath, operationPath)
+
+	if targetURL != "" {
+		normalizedTargetURL := normalizeURL(targetURL)
+		parsedTargetURL, err := url.Parse(normalizedTargetURL)
+		if err != nil {
+			return "", "", "", err
+		}
+		if parsedTargetURL.Scheme == "" || parsedTargetURL.Host == "" {
+			return "", "", "", fmt.Errorf("target URL must include host: %s", targetURL)
+		}
+
+		targetBasePath := cleanURLPath(parsedTargetURL.Path)
+		if targetBasePath == "/" {
+			targetBasePath = serverBasePath
+		}
+
+		fullPath := joinURLPath(targetBasePath, operationPath)
+		fullURL := parsedTargetURL.Scheme + "://" + parsedTargetURL.Host + fullPath
+		return fullURL, fullPath, routePath, nil
+	}
+
+	if serverURL == "" {
+		return "", "", "", fmt.Errorf("no server URL defined in spec and no target URL provided via CLI")
+	}
+
+	normalizedServerURL := normalizeURL(serverURL)
+	parsedServerURL, err := url.Parse(normalizedServerURL)
+	if err != nil {
+		return "", "", "", err
+	}
+	if parsedServerURL.Scheme == "" || parsedServerURL.Host == "" {
+		return "", "", "", fmt.Errorf("server URL is relative, provide -url for target host: %s", serverURL)
+	}
+
+	fullURL := parsedServerURL.Scheme + "://" + parsedServerURL.Host + routePath
+	return fullURL, routePath, routePath, nil
+}
+
+func pathFromServerURL(serverURL string) (string, error) {
+	if serverURL == "" {
+		return "/", nil
+	}
+
+	parsedServerURL, err := url.Parse(serverURL)
+	if err != nil {
+		return "", err
+	}
+
+	return cleanURLPath(parsedServerURL.Path), nil
+}
+
+func cleanURLPath(path string) string {
+	if path == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	if len(path) > 1 && strings.HasSuffix(path, "/") {
+		path = strings.TrimSuffix(path, "/")
+	}
+	return path
+}
+
+func joinURLPath(basePath, operationPath string) string {
+	basePath = cleanURLPath(basePath)
+	operationPath = cleanURLPath(operationPath)
+	if basePath == "/" {
+		return operationPath
+	}
+	if operationPath == "/" {
+		return basePath
+	}
+	return basePath + "/" + strings.TrimPrefix(operationPath, "/")
+}
+
+func normalizeURL(rawURL string) string {
+	if rawURL == "" || strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") {
+		return rawURL
+	}
+	return "http://" + rawURL
 }
 
 func ValidateRequest(httpRequest *http.Request, pathParams map[string]string, queryParams *url.Values, route *routers.Route, ctx context.Context) (*openapi3filter.RequestValidationInput, error) {
@@ -230,11 +253,19 @@ func ValidateRequest(httpRequest *http.Request, pathParams map[string]string, qu
 
 	// Try to validate the request, but don't fail if validation fails during fuzzing
 	validationErr := openapi3filter.ValidateRequest(ctx, requestValidationInput)
+	if httpRequest.GetBody != nil {
+		body, err := httpRequest.GetBody()
+		if err != nil {
+			log.Debugf("request.go	Failed to reset request body after validation: %v", err)
+		} else {
+			httpRequest.Body = body
+		}
+	}
 	if validationErr != nil {
 		// Log the validation error but continue anyway during fuzzing
 		log.Debugf("request.go	Validation error: %v", validationErr)
 		// Return the input even if validation failed, so requests can still be sent
-		return requestValidationInput, nil
+		return requestValidationInput, validationErr
 	}
 
 	return requestValidationInput, nil

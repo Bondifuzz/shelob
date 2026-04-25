@@ -20,7 +20,7 @@ func ParseCliArgs() (string, string, string, string, string, string, string, boo
 	outputDir := flag.String("output", "fuzzer_output", "output directory")
 	detailedOutput := flag.Bool("detailed", false, "include successful test cases")
 	duration := flag.Duration("duration", 3600000000000, "time duration of fuzzing")
-	enableDebug := flag.Bool("debug", false, "enable debug logs (default: true)")
+	enableDebug := flag.Bool("debug", false, "enable debug logs")
 	rps := flag.Int("rps", 0, "requests per second limit (0 means no limit)")
 
 	flag.Parse()

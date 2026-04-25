@@ -17,13 +17,15 @@ import (
 func Run() {
 	Start := time.Now()
 
+	log.SetLevel(log.FatalLevel)
+
 	Spec, TargetURL, UserName, Password, ApiKey, Token, OutputDir, Detailed, Duration, ExtraArgs, EnableDebug, RPS := cliArgs.ParseCliArgs()
 
 	// Set log level based on the debug flag
 	if EnableDebug {
 		log.SetLevel(log.DebugLevel)
 	} else {
-		log.SetLevel(log.InfoLevel)
+		log.SetLevel(log.FatalLevel)
 	}
 
 	Context, OpenapiData, Router := openapi.ParseOpenapiSpec(Spec, TargetURL)

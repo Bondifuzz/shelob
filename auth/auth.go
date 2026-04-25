@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
+
+const defaultAuthTimeout = 30 * time.Second
 
 type UserItem struct {
 	Username string `json:"username"`
@@ -18,7 +21,6 @@ type UserItem struct {
 	// For example:
 	// SessionMetadata string `json:"session_metadata"`
 }
-
 
 func CreateUser(username, password, url string) []*http.Cookie {
 	return CreateUserWithLoginEndpoint(username, password, url, "/api/v3/user/login")
@@ -34,6 +36,10 @@ func CreateUserWithLoginEndpoint(username, password, url, loginEndpoint string) 
 }
 
 func (testUser *UserItem) getCookies(url, loginEndpoint string) []*http.Cookie {
+	if testUser.Username == "" || testUser.Password == "" || url == "" {
+		return []*http.Cookie{}
+	}
+
 	// Ensure URL has proper scheme
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		url = "http://" + url
@@ -58,7 +64,8 @@ func (testUser *UserItem) getCookies(url, loginEndpoint string) []*http.Cookie {
 	httpRequest.Header.Set("Accept", "application/json")
 	httpRequest.Header.Set("Content-type", "application/json")
 
-	response, err := http.DefaultClient.Do(httpRequest)
+	client := &http.Client{Timeout: defaultAuthTimeout}
+	response, err := client.Do(httpRequest)
 	if err != nil {
 		log.Warn("auth.go	Failed to make http request for authentication: ", err)
 		// Return empty cookies instead of nil to allow fuzzing to continue without authentication
