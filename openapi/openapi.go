@@ -2,6 +2,8 @@ package openapi
 
 import (
 	"context"
+	"net/url"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/routers"
@@ -17,25 +19,8 @@ func ParseOpenapiSpec(spec string, targetURL string) (*context.Context, *openapi
 		log.Fatal("openapi.go	Failed to load specification from file: ", err)
 	}
 
-	// Use target URL from CLI if provided, otherwise use server URLs from spec
 	if targetURL != "" {
-		// Override all server URLs with the target URL from command line
-		if openapiData.Servers != nil {
-			log.Infof("Overriding server URLs in spec with CLI target URL: %s", targetURL)
-			for _, server := range openapiData.Servers {
-				if server != nil {
-					server.URL = targetURL
-				}
-			}
-		} else {
-			// If no servers are defined in spec, create a default server with the target URL
-			log.Infof("No servers defined in spec, using CLI target URL: %s", targetURL)
-			openapiData.Servers = openapi3.Servers{
-				&openapi3.Server{
-					URL: targetURL,
-				},
-			}
-		}
+		normalizeServersForTarget(openapiData, targetURL)
 	} else {
 		// Use server URLs from the spec file
 		if openapiData.Servers != nil {
@@ -96,4 +81,66 @@ func ParseOpenapiSpec(spec string, targetURL string) (*context.Context, *openapi
 	log.Info("[+++] OpenAPI spec are parsed ok")
 
 	return &ctx, openapiData, &router
+}
+
+func normalizeServersForTarget(openapiData *openapi3.T, targetURL string) {
+	targetPath := "/"
+	parsedTargetURL, err := url.Parse(normalizeURL(targetURL))
+	if err == nil && parsedTargetURL.Path != "" {
+		targetPath = cleanServerPath(parsedTargetURL.Path)
+	}
+
+	// A CLI URL with a path is an explicit base-path override. A host-only CLI
+	// URL keeps the base path from the OpenAPI servers section.
+	if targetPath != "/" {
+		log.Infof("Overriding server base paths in spec with CLI target URL path: %s", targetPath)
+		openapiData.Servers = openapi3.Servers{
+			&openapi3.Server{URL: targetPath},
+		}
+		return
+	}
+
+	if openapiData.Servers == nil || len(openapiData.Servers) == 0 {
+		log.Infof("No servers defined in spec, using CLI target URL: %s", targetURL)
+		openapiData.Servers = openapi3.Servers{
+			&openapi3.Server{URL: "/"},
+		}
+		return
+	}
+
+	log.Infof("Using CLI target host with server base paths from the OpenAPI specification")
+	for _, server := range openapiData.Servers {
+		if server == nil {
+			continue
+		}
+
+		serverPath := "/"
+		if server.URL != "" {
+			parsedServerURL, err := url.Parse(server.URL)
+			if err == nil && parsedServerURL.Path != "" {
+				serverPath = cleanServerPath(parsedServerURL.Path)
+			}
+		}
+		server.URL = serverPath
+	}
+}
+
+func normalizeURL(rawURL string) string {
+	if rawURL == "" || strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") {
+		return rawURL
+	}
+	return "http://" + rawURL
+}
+
+func cleanServerPath(path string) string {
+	if path == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	if len(path) > 1 && strings.HasSuffix(path, "/") {
+		path = strings.TrimSuffix(path, "/")
+	}
+	return path
 }

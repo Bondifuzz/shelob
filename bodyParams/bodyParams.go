@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 
 	"shelob/generateInput"
 
@@ -56,7 +57,11 @@ func CreateBodyData(operation *openapi3.Operation, debugEnabled bool) (string, *
 					goto Exit
 
 				case "application/octet-stream":
-					_, err := bodyParams.Write(bodyData.([]byte))
+					bodyBytes, ok := bodyData.([]byte)
+					if !ok {
+						bodyBytes = []byte(fmt.Sprintf("%v", bodyData))
+					}
+					_, err := bodyParams.Write(bodyBytes)
 					if err != nil {
 						log.Error("bodyParams.go	bodyParams.Write: ", err)
 					}
@@ -64,7 +69,11 @@ func CreateBodyData(operation *openapi3.Operation, debugEnabled bool) (string, *
 					goto Exit
 
 				case "text/plain":
-					_, err := bodyParams.Write(bodyData.([]byte))
+					bodyBytes, ok := bodyData.([]byte)
+					if !ok {
+						bodyBytes = []byte(fmt.Sprintf("%v", bodyData))
+					}
+					_, err := bodyParams.Write(bodyBytes)
 					if err != nil {
 						log.Error("bodyParams.go	bodyParams.Write: ", err)
 					}

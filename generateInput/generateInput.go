@@ -2,7 +2,6 @@ package generateInput
 
 import (
 	"encoding/base64"
-	"math"
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -72,7 +71,7 @@ func CheckNumberFormat(format string) interface{} {
 		return gofakeit.Float64()
 		//        return gofakeit.Float64Range(*min, *max)
 	default:
-		return gofakeit.Number(int(math.Inf(-1)), int(math.Inf(1)))
+		return gofakeit.Float64Range(-1_000_000, 1_000_000)
 	}
 }
 
@@ -85,7 +84,7 @@ func CheckIntegerFormat(format string) interface{} {
 		return gofakeit.Int64()
 		//        return strconv.FormatInt(gofakeit.Int64(), 10)
 	default:
-		return gofakeit.IntRange(int(math.Inf(-1)), int(math.Inf(1)))
+		return gofakeit.IntRange(-1_000_000, 1_000_000)
 		//        return strconv.FormatInt(int64(gofakeit.IntRange(int(math.Inf(-1)), int(math.Inf(1)))), 10)
 	}
 }
@@ -102,10 +101,10 @@ func CheckStringFormat(format string) interface{} {
 
 		// Add support to change password length
 
-		randLen := gofakeit.IntRange(0, 255)
+		randLen := gofakeit.IntRange(1, 255)
 		return gofakeit.Password(true, true, true, true, true, randLen)
 	case "byte":
-		randLen := gofakeit.IntRange(int(math.Inf(-1)), int(math.Inf(1)))
+		randLen := gofakeit.IntRange(1, 1024)
 		randStr := gofakeit.LetterN(uint(randLen))
 		return base64.StdEncoding.EncodeToString([]byte(randStr))
 	case "binary":
@@ -118,13 +117,13 @@ func CheckStringFormat(format string) interface{} {
 	case "uri":
 		return gofakeit.URL()
 	case "hostname":
-		return gofakeit.DomainName() + gofakeit.DomainSuffix()
+		return gofakeit.DomainName() + "." + gofakeit.DomainSuffix()
 	case "ipv4":
 		return gofakeit.IPv4Address()
 	case "ipv6":
 		return gofakeit.IPv6Address()
 	default:
-		randLen := gofakeit.IntRange(int(math.Inf(-1)), int(math.Inf(1)))
+		randLen := gofakeit.IntRange(1, 1024)
 		return gofakeit.LetterN(uint(randLen))
 	}
 }

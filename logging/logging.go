@@ -47,81 +47,51 @@ func CreateDir(outputDir string) {
 }
 
 func WrapCrash(filename string, response *http.Response, requestValidationError error, requestBody []byte, responseBody []byte, errval error) {
-	log.SetFormatter(&logrus.JSONFormatter{
-		PrettyPrint:       true,
-		DisableHTMLEscape: true,
-	})
-
-	// Create a unique filename with timestamp to avoid appending to the same file
-	timestamp := time.Now().Format("20060102_150405_000") // Format: YYYYMMDD_HHMMSS_mmm
-
-	// Separate directory and base filename to preserve directory structure
-	outputDir := filepath.Dir(filename)
-	baseFilename := filepath.Base(filename)
-	sanitizedBase := sanitizeFilename(baseFilename) // Only sanitize the base name
-	uniqueFilename := filepath.Join(outputDir, sanitizedBase + "_" + timestamp + ".json")
-
-	file, err := os.OpenFile(uniqueFilename, os.O_CREATE|os.O_WRONLY, 0o644)
-
-	if err == nil {
-		log.SetOutput(file)
-	} else {
-		log.Warn("logging.go	Failed to log to the file, using default stderr")
-	}
-
-	// defer file.Close()
-
-	log.WithFields(logrus.Fields{
-		"raw_path":            response.Request.URL.RawPath,
-		"method":              response.Request.Method,
-		"status":              response.Status,
-		"path":                response.Request.URL.Path,
-		"query":               response.Request.URL.RawQuery,
-		"headers":             response.Request.Header,
-		"cookies":             response.Request.Cookies(),
-		"body_payload":        string(requestBody),
-		"request_validation":  requestValidationError,
-		"response_body":       string(responseBody),
-		"response_validation": errval,
-	}).Error("Crash")
+	writeReport(filename, response, requestValidationError, requestBody, responseBody, errval, logrus.ErrorLevel, "Crash")
 }
 
 func WrapTest(filename string, response *http.Response, requestValidationError error, requestBody []byte, responseBody []byte, errval error) {
-	log.SetFormatter(&logrus.JSONFormatter{
+	writeReport(filename, response, requestValidationError, requestBody, responseBody, errval, logrus.InfoLevel, "Test")
+}
+
+func writeReport(filename string, response *http.Response, requestValidationError error, requestBody []byte, responseBody []byte, errval error, level logrus.Level, message string) {
+	reportLog := logrus.New()
+	reportLog.SetFormatter(&logrus.JSONFormatter{
 		PrettyPrint:       true,
 		DisableHTMLEscape: true,
 	})
-
-	// Create a unique filename with timestamp to avoid appending to the same file
-	timestamp := time.Now().Format("20060102_150405_000") // Format: YYYYMMDD_HHMMSS_mmm
 
 	// Separate directory and base filename to preserve directory structure
 	outputDir := filepath.Dir(filename)
 	baseFilename := filepath.Base(filename)
 	sanitizedBase := sanitizeFilename(baseFilename) // Only sanitize the base name
-	uniqueFilename := filepath.Join(outputDir, sanitizedBase + "_" + timestamp + ".json")
-
-	file, err := os.OpenFile(uniqueFilename, os.O_CREATE|os.O_WRONLY, 0o644)
-
-	if err == nil {
-		log.SetOutput(file)
-	} else {
-		log.Warn("logging.go	Failed to log to the file, using default stderr")
+	if sanitizedBase == "" {
+		sanitizedBase = "report"
 	}
 
-	// defer file.Close()
+	timestamp := time.Now().Format("20060102_150405")
+	file, err := os.CreateTemp(outputDir, sanitizedBase+"_"+timestamp+"_*.json")
+	if err != nil {
+		log.Debug("logging.go	Failed to log to the file: ", err)
+		return
+	}
+	defer file.Close()
+	reportLog.SetOutput(file)
 
-	log.WithFields(logrus.Fields{
+	entry := reportLog.WithFields(logrus.Fields{
 		"raw_path":            response.Request.URL.RawPath,
 		"method":              response.Request.Method,
 		"status":              response.Status,
 		"path":                response.Request.URL.Path,
 		"query":               response.Request.URL.RawQuery,
 		"headers":             response.Request.Header,
+		"response_headers":    response.Header,
 		"cookies":             response.Request.Cookies(),
 		"body_payload":        string(requestBody),
 		"request_validation":  requestValidationError,
 		"response_body":       string(responseBody),
 		"response_validation": errval,
-	}).Info("Test")
+	})
+
+	entry.Log(level, message)
 }
